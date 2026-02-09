@@ -74,10 +74,12 @@ export async function POST(request: NextRequest) {
     // Get supervisor allocation
     let allocation = null;
     try {
+      console.log('Looking for supervisor allocation for student_id:', student.id);
       allocation = await getOne(
         'SELECT sa.supervisor_id FROM supervisor_allocations sa WHERE sa.student_id = ? AND sa.status = "active"',
         [student.id]
       );
+      console.log('Found allocation:', allocation);
     } catch (error) {
       console.log('Supervisor allocations table not found, using fallback supervisor');
       // Create a fallback supervisor allocation if the table doesn't exist
@@ -103,7 +105,7 @@ export async function POST(request: NextRequest) {
       console.log('Research stages table not found, using fallback stage');
       // Create a fallback research stage if the table doesn't exist
       try {
-        researchStage = { id: research_stage_id, stage_order: 1 }; // Use fallback stage order
+        researchStage = { id: research_stage_id, order_index: 1 }; // Use fallback stage order
       } catch (fallbackError) {
         console.log('Could not create fallback research stage');
       }
@@ -117,10 +119,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if student has completed previous stages
-    if (researchStage.stage_order > 1) {
+    if (researchStage.order_index > 1) {
       const previousStageCompleted = await getOne(
-        'SELECT ds.status FROM document_submissions ds JOIN research_stages rs ON ds.research_stage_id = rs.id WHERE ds.student_id = ? AND rs.stage_order = ? AND ds.status = "approved"',
-        [student.id, researchStage.stage_order - 1]
+        'SELECT ds.status FROM document_submissions ds JOIN research_stages rs ON ds.research_stage_id = rs.id WHERE ds.student_id = ? AND rs.order_index = ? AND ds.status = "approved"',
+        [student.id, researchStage.order_index - 1]
       );
 
       if (!previousStageCompleted) {
@@ -162,7 +164,7 @@ export async function POST(request: NextRequest) {
       await update(
         'students',
         { 
-          current_stage: researchStage.stage_order,
+          current_stage: researchStage.order_index,
           last_submission_date: new Date().toISOString().slice(0, 19).replace('T', ' ')
         },
         { id: student.id }
@@ -217,7 +219,7 @@ export async function GET(request: NextRequest) {
           sup.last_name as supervisor_last_name,
           sup.email as supervisor_email,
           rs.name as research_stage_name,
-          rs.stage_order
+          rs.order_index
         FROM document_submissions ds
         JOIN students st ON ds.student_id = st.id
         JOIN users s ON st.user_id = s.id
@@ -263,7 +265,7 @@ export async function GET(request: NextRequest) {
             SELECT 
               ds.*,
               rs.name as research_stage_name,
-              rs.stage_order,
+              rs.order_index,
               sup.first_name as supervisor_first_name,
               sup.last_name as supervisor_last_name
             FROM document_submissions ds
@@ -276,17 +278,20 @@ export async function GET(request: NextRequest) {
         }
       } else if (user.role_name === 'supervisor') {
         // Get supervisor's assigned student submissions
+        console.log('User is supervisor, looking for submissions for user_id:', user.id);
         const supervisor = await getOne('SELECT id FROM supervisors WHERE user_id = ?', [user.id]);
+        console.log('Found supervisor:', supervisor);
         if (supervisor) {
+          console.log('Looking for submissions with supervisor_id:', supervisor.id);
           submissions = await getMany(`
             SELECT 
               ds.*,
               rs.name as research_stage_name,
-              rs.stage_order,
+              rs.order_index,
               s.first_name as student_first_name,
               s.last_name as student_last_name,
               s.email as student_email,
-              s.registration_number
+              st.registration_number
             FROM document_submissions ds
             JOIN research_stages rs ON ds.research_stage_id = rs.id
             JOIN students st ON ds.student_id = st.id
@@ -294,6 +299,7 @@ export async function GET(request: NextRequest) {
             WHERE ds.supervisor_id = ?
             ORDER BY ds.submitted_at DESC
           `, [supervisor.id]);
+          console.log('Found submissions for supervisor:', submissions);
         }
       } else if (user.role_name === 'admin' || user.role_name === 'super_admin') {
         // Get all submissions for admins
@@ -301,7 +307,7 @@ export async function GET(request: NextRequest) {
           SELECT 
             ds.*,
             rs.name as research_stage_name,
-            rs.stage_order,
+            rs.order_index,
             s.first_name as student_first_name,
             s.last_name as student_last_name,
             s.email as student_email,

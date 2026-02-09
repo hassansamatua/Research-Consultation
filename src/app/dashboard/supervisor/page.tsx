@@ -60,6 +60,12 @@ export default function SupervisorPage() {
   };
 
   const fetchSupervisorInfo = async () => {
+    // Ensure user is available before proceeding
+    if (!user) {
+      console.log('User not available, using fallback data');
+      return;
+    }
+
     try {
       // Try to get allocation from database
       let allocationData = null;
@@ -96,8 +102,8 @@ export default function SupervisorPage() {
         const fallbackAllocation: Allocation = {
           id: 1,
           supervisor_id: 1,
-          student_id: user?.id || 1,
-          allocation_date: '2024-2024-01-15',
+          student_id: user.id,
+          allocation_date: '2024-01-15',
           status: 'active',
           notes: 'Initial allocation for research supervision'
         };

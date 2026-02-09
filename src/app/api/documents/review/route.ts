@@ -4,8 +4,10 @@ import { getOne, getMany, insert, update } from '@/lib/db';
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('POST /api/documents/review called');
     // Authenticate user
     const user = await authenticateRequest(request);
+    console.log('User:', user);
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
@@ -14,6 +16,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
+    console.log('Request body:', body);
     const { 
       submission_id, 
       comments, 
@@ -22,8 +25,11 @@ export async function POST(request: NextRequest) {
       review_type 
     } = body;
 
+    console.log('Extracted fields:', { submission_id, comments, rating, recommendation, review_type });
+
     // Validate required fields
     if (!submission_id || !comments || !recommendation) {
+      console.log('Validation failed - missing fields');
       return NextResponse.json(
         { error: 'Missing required fields: submission_id, comments, recommendation' },
         { status: 400 }
@@ -31,16 +37,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Get submission details
+    console.log('Getting submission details for ID:', submission_id);
     const submission = await getOne(`
-      SELECT ds.*, s.user_id as student_user_id, su.user_id as supervisor_user_id
+      SELECT ds.*, st.user_id as student_user_id, su.user_id as supervisor_user_id
       FROM document_submissions ds
       JOIN students st ON ds.student_id = st.id
-      JOIN users s ON st.user_id = s.id
+      JOIN users u ON st.user_id = u.id
       JOIN supervisors su ON ds.supervisor_id = su.id
       WHERE ds.id = ?
     `, [submission_id]);
+    
+    console.log('Found submission:', submission);
 
     if (!submission) {
+      console.log('Submission not found - returning 404');
       return NextResponse.json(
         { error: 'Submission not found' },
         { status: 404 }
@@ -49,13 +59,18 @@ export async function POST(request: NextRequest) {
 
     // Check if user is authorized to review
     let isAuthorized = false;
+    console.log('Checking authorization - User role:', user.role_name, 'User ID:', user.id, 'Supervisor user ID:', submission?.supervisor_user_id);
+    
     if (user.role_name === 'supervisor' && user.id === submission.supervisor_user_id) {
       isAuthorized = true;
     } else if (user.role_name === 'admin' || user.role_name === 'super_admin') {
       isAuthorized = true;
     }
+    
+    console.log('Is authorized:', isAuthorized);
 
     if (!isAuthorized) {
+      console.log('Not authorized - returning 403');
       return NextResponse.json(
         { error: 'Not authorized to review this submission' },
         { status: 403 }
@@ -63,7 +78,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if submission is in a reviewable state
+    console.log('Submission status:', submission.status);
     if (submission.status !== 'pending' && submission.status !== 'reviewed') {
+      console.log('Submission not in reviewable state - returning 400');
       return NextResponse.json(
         { error: 'Submission is not in a reviewable state' },
         { status: 400 }
@@ -98,15 +115,15 @@ export async function POST(request: NextRequest) {
         const currentStage = await getOne('SELECT * FROM research_stages WHERE id = ?', [submission.research_stage_id]);
         if (currentStage) {
           const nextStage = await getOne(
-            'SELECT * FROM research_stages WHERE stage_order = ?',
-            [currentStage.stage_order + 1]
+            'SELECT * FROM research_stages WHERE order_index = ?',
+            [currentStage.order_index + 1]
           );
           
           if (nextStage) {
             await update(
               'students',
               { 
-                current_stage: nextStage.stage_order,
+                current_stage: nextStage.order_index,
                 current_stage_id: nextStage.id,
                 last_approval_date: approvedAt
               },
@@ -117,7 +134,7 @@ export async function POST(request: NextRequest) {
             await update(
               'students',
               { 
-                current_stage: currentStage.stage_order + 1,
+                current_stage: currentStage.order_index + 1,
                 current_stage_id: null,
                 status: 'completed',
                 completion_date: approvedAt
@@ -308,7 +325,7 @@ async function updateResearchProgress(studentId: number) {
   try {
     // Calculate overall progress based on approved submissions
     const approvedSubmissions = await getOne(`
-      SELECT COUNT(*) as count, MAX(rs.stage_order) as max_stage
+      SELECT COUNT(*) as count, MAX(rs.order_index) as max_stage
       FROM document_submissions ds
       JOIN research_stages rs ON ds.research_stage_id = rs.id
       WHERE ds.student_id = ? AND ds.status = 'approved'

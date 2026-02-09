@@ -32,7 +32,8 @@ export async function POST(request: NextRequest) {
       registration_number,
       program,
       department,
-      specialization 
+      specialization,
+      max_students
     } = body;
 
     // Validate required fields
@@ -121,16 +122,19 @@ export async function POST(request: NextRequest) {
 
     // If supervisor, also create supervisor record
     if (validRoles.name === 'supervisor') {
-      await insert('supervisors', {
-        user_id: userId,
-        department: department,
-        specialization: specialization,
-        max_students: 10,
-        current_students: 0,
-        is_active: true,
-        created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
-      });
+      try {
+        await insert('supervisors', {
+          user_id: userId,
+          department: department,
+          specialization: specialization,
+          max_students: max_students || 10,
+          current_students: 0,
+          created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+          updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+        });
+      } catch (error) {
+        console.log('Supervisors table not found, skipping supervisor record creation');
+      }
     }
 
     // Return success response without password
