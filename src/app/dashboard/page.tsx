@@ -6,11 +6,39 @@ import { useRouter } from 'next/navigation';
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState<any>(null);
   const router = useRouter();
 
   useEffect(() => {
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchDashboardData();
+    }
+  }, [user]);
+
+  const fetchDashboardData = async () => {
+    try {
+      let response;
+      
+      if (user.role_name === 'student') {
+        response = await fetch('/api/student/dashboard-stats');
+      } else if (user.role_name === 'supervisor') {
+        response = await fetch('/api/supervisor/dashboard-stats');
+      } else if (user.role_name === 'admin' || user.role_name === 'super_admin') {
+        response = await fetch('/api/admin/dashboard-stats');
+      }
+
+      if (response && response.ok) {
+        const data = await response.json();
+        setDashboardData(data);
+      }
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    }
+  };
 
   const checkAuth = async () => {
     try {
@@ -51,92 +79,95 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      {user.role_name === 'student' && <StudentDashboard />}
-      {user.role_name === 'supervisor' && <SupervisorDashboard />}
-      {(user.role_name === 'admin' || user.role_name === 'super_admin') && <AdminDashboard />}
+      {user.role_name === 'student' && <StudentDashboard data={dashboardData} />}
+      {user.role_name === 'supervisor' && <SupervisorDashboard data={dashboardData} />}
+      {(user.role_name === 'admin' || user.role_name === 'super_admin') && <AdminDashboard data={dashboardData} />}
     </div>
   );
 }
 
-function StudentDashboard() {
+function StudentDashboard({ data }: { data: any }) {
+  const student = data?.student || {};
+  const stats = data?.statistics || {};
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Research Progress</h3>
-        <div className="text-3xl font-bold text-green-600 mb-2">65%</div>
-        <p className="text-sm text-gray-600">3 of 5 stages completed</p>
+        <div className="text-3xl font-bold text-green-600 mb-2">{student.progress_percentage || 0}%</div>
+        <p className="text-sm text-gray-600">{student.completed_stages || 0} of {student.total_stages || 0} stages completed</p>
         <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
-          <div className="bg-green-600 h-2 rounded-full" style={{ width: '65%' }}></div>
+          <div className="bg-green-600 h-2 rounded-full" style={{ width: `${student.progress_percentage || 0}%` }}></div>
         </div>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Current Submissions</h3>
-        <div className="text-3xl font-bold text-blue-600 mb-2">2</div>
-        <p className="text-sm text-gray-600">1 under review, 1 approved</p>
+        <div className="text-3xl font-bold text-blue-600 mb-2">{stats.current_submissions || 0}</div>
+        <p className="text-sm text-gray-600">{stats.under_review || 0} under review, {stats.approved || 0} approved</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Messages</h3>
-        <div className="text-3xl font-bold text-purple-600 mb-2">3</div>
-        <p className="text-sm text-gray-600">2 unread messages</p>
+        <div className="text-3xl font-bold text-purple-600 mb-2">{stats.total_messages || 0}</div>
+        <p className="text-sm text-gray-600">{stats.unread_messages || 0} unread messages</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow md:col-span-2 lg:col-span-3">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
         <div className="space-y-3">
-          <div className="flex items-center justify-between py-2 border-b">
-            <div>
-              <p className="text-sm font-medium text-gray-900">Chapter 3 Submitted</p>
-              <p className="text-xs text-gray-500">2 days ago</p>
+          {data?.recent_messages && data.recent_messages.length > 0 ? (
+            data.recent_messages.map((message: any, index: number) => (
+              <div key={message.id || index} className="flex items-center justify-between py-2 border-b">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{message.subject}</p>
+                  <p className="text-xs text-gray-500">
+                    From: {message.sender_first_name} {message.sender_last_name} • 
+                    {new Date(message.created_at).toLocaleDateString()}
+                  </p>
+                </div>
+                <span className={`px-2 py-1 text-xs font-medium rounded ${
+                  message.is_read 
+                    ? 'bg-gray-100 text-gray-800' 
+                    : 'bg-blue-100 text-blue-800'
+                }`}>
+                  {message.is_read ? 'Read' : 'New'}
+                </span>
+              </div>
+            ))
+          ) : (
+            <div className="text-center py-8 text-sm text-gray-500">
+              No recent activity
             </div>
-            <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded">
-              Under Review
-            </span>
-          </div>
-          <div className="flex items-center justify-between py-2 border-b">
-            <div>
-              <p className="text-sm font-medium text-gray-900">Chapter 2 Approved</p>
-              <p className="text-xs text-gray-500">1 week ago</p>
-            </div>
-            <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded">
-              Approved
-            </span>
-          </div>
-          <div className="flex items-center justify-between py-2">
-            <div>
-              <p className="text-sm font-medium text-gray-900">New message from supervisor</p>
-              <p className="text-xs text-gray-500">2 weeks ago</p>
-            </div>
-            <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded">
-              Message
-            </span>
-          </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function SupervisorDashboard() {
+function SupervisorDashboard({ data }: { data: any }) {
+  const stats = data?.statistics || {};
+  const students = data?.students || [];
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Assigned Students</h3>
-        <div className="text-3xl font-bold text-green-600 mb-2">8</div>
-        <p className="text-sm text-gray-600">6 active, 2 completed</p>
+        <div className="text-3xl font-bold text-green-600 mb-2">{stats.assigned_students || 0}</div>
+        <p className="text-sm text-gray-600">{stats.active_students || 0} active, {stats.completed_students || 0} completed</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Pending Reviews</h3>
-        <div className="text-3xl font-bold text-orange-600 mb-2">4</div>
-        <p className="text-sm text-gray-600">3 submissions awaiting review</p>
+        <div className="text-3xl font-bold text-orange-600 mb-2">{stats.pending_reviews || 0}</div>
+        <p className="text-sm text-gray-600">{stats.pending_reviews || 0} submissions awaiting review</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Messages</h3>
-        <div className="text-3xl font-bold text-purple-600 mb-2">12</div>
-        <p className="text-sm text-gray-600">5 unread messages</p>
+        <div className="text-3xl font-bold text-purple-600 mb-2">{stats.total_messages || 0}</div>
+        <p className="text-sm text-gray-600">{stats.unread_messages || 0} unread messages</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow md:col-span-2 lg:col-span-3">
@@ -160,48 +191,48 @@ function SupervisorDashboard() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  Ali Hassan
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  Machine Learning Applications
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: '75%' }}></div>
-                    </div>
-                    <span className="text-sm text-gray-600">75%</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                    On Track
-                  </span>
-                </td>
-              </tr>
-              <tr>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  Fatma Omar
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  Climate Change Impact Study
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
-                      <div className="bg-yellow-600 h-2 rounded-full" style={{ width: '40%' }}></div>
-                    </div>
-                    <span className="text-sm text-gray-600">40%</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-yellow-100 text-yellow-800">
-                    Review Needed
-                  </span>
-                </td>
-              </tr>
+              {students.length > 0 ? (
+                students.map((student: any, index: number) => (
+                  <tr key={student.student_id || index}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      {student.student_first_name} {student.student_last_name}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {student.research_title || 'No title assigned'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="w-16 bg-gray-200 rounded-full h-2 mr-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              student.progress_percentage >= 75 ? 'bg-green-600' : 
+                              student.progress_percentage >= 40 ? 'bg-yellow-600' : 'bg-red-600'
+                            }`} 
+                            style={{ width: `${student.progress_percentage}%` }}
+                          ></div>
+                        </div>
+                        <span className="text-sm text-gray-600">{student.progress_percentage}%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        student.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                        student.status === 'On Track' ? 'bg-blue-100 text-blue-800' :
+                        student.status === 'Review Needed' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {student.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">
+                    No students assigned yet
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -210,31 +241,33 @@ function SupervisorDashboard() {
   );
 }
 
-function AdminDashboard() {
+function AdminDashboard({ data }: { data: any }) {
+  const stats = data?.statistics || {};
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Students</h3>
-        <div className="text-3xl font-bold text-blue-600 mb-2">156</div>
-        <p className="text-sm text-gray-600">+12% from last semester</p>
+        <div className="text-3xl font-bold text-blue-600 mb-2">{stats.total_students || 0}</div>
+        <p className="text-sm text-gray-600">{stats.percentage_change >= 0 ? '+' : ''}{stats.percentage_change || 0}% from last semester</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Active Supervisors</h3>
-        <div className="text-3xl font-bold text-green-600 mb-2">42</div>
-        <p className="text-sm text-gray-600">3.7 students per supervisor</p>
+        <div className="text-3xl font-bold text-green-600 mb-2">{stats.active_supervisors || 0}</div>
+        <p className="text-sm text-gray-600">{stats.avg_students_per_supervisor || 0} students per supervisor</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Pending Submissions</h3>
-        <div className="text-3xl font-bold text-orange-600 mb-2">28</div>
+        <div className="text-3xl font-bold text-orange-600 mb-2">{stats.pending_submissions || 0}</div>
         <p className="text-sm text-gray-600">Awaiting review</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-semibold text-gray-900 mb-2">Completed This Year</h3>
-        <div className="text-3xl font-bold text-purple-600 mb-2">23</div>
-        <p className="text-sm text-gray-600">15 Masters, 8 PhDs</p>
+        <div className="text-3xl font-bold text-purple-600 mb-2">{stats.completed_this_year || 0}</div>
+        <p className="text-sm text-gray-600">{stats.masters_completed || 0} Masters, {stats.phd_completed || 0} PhDs</p>
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow md:col-span-2 lg:col-span-4">

@@ -5,11 +5,30 @@ import { useRouter } from 'next/navigation';
 
 interface Message {
   id: number;
-  sender_name: string;
+  sender_id: number;
+  receiver_id: number;
   subject: string;
   message_text: string;
   is_read: boolean;
   created_at: string;
+  sender_first_name: string;
+  sender_last_name: string;
+  sender_email: string;
+  sender_role: string;
+  receiver_first_name: string;
+  receiver_last_name: string;
+  receiver_email: string;
+  receiver_role: string;
+}
+
+interface Recipient {
+  id: number;
+  first_name: string;
+  last_name: string;
+  email: string;
+  role_name: string;
+  registration_number?: string;
+  program?: string;
 }
 
 export default function MessagesPage() {
@@ -18,17 +37,31 @@ export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<Message | null>(null);
   const [composing, setComposing] = useState(false);
+  const [recipients, setRecipients] = useState<{
+    admins: Recipient[];
+    students: Recipient[];
+  }>({ admins: [], students: [] });
+  const [selectedRecipients, setSelectedRecipients] = useState<number[]>([]);
   const [newMessage, setNewMessage] = useState({
-    receiver_email: '',
     subject: '',
     message_text: ''
   });
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const router = useRouter();
 
   useEffect(() => {
     checkAuth();
-    fetchMessages();
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchMessages();
+      if (user.role_name === 'supervisor') {
+        fetchRecipients();
+      }
+    }
+  }, [user]);
 
   const checkAuth = async () => {
     try {
@@ -47,34 +80,38 @@ export default function MessagesPage() {
   };
 
   const fetchMessages = async () => {
-    // Mock messages for now
-    const mockMessages: Message[] = [
-      {
-        id: 1,
-        sender_name: 'Dr. Mohamed Ali',
-        subject: 'Research Proposal Review',
-        message_text: 'I have reviewed your research proposal and have some feedback. Please schedule a meeting to discuss the revisions.',
-        is_read: false,
-        created_at: '2024-01-15T10:30:00Z'
-      },
-      {
-        id: 2,
-        sender_name: 'Admin User',
-        subject: 'Deadline Reminder',
-        message_text: 'This is a reminder that the proposal submission deadline is approaching. Please ensure you submit your work on time.',
-        is_read: true,
-        created_at: '2024-01-14T14:20:00Z'
-      },
-      {
-        id: 3,
-        sender_name: 'System Notification',
-        subject: 'System Maintenance',
-        message_text: 'The system will be undergoing maintenance this weekend. Please save your work before Friday evening.',
-        is_read: true,
-        created_at: '2024-01-13T09:15:00Z'
+    try {
+      const response = await fetch('/api/messages');
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data.messages || []);
+        console.log('✅ Loaded real messages data:', data.messages?.length || 0, 'messages');
+      } else {
+        console.log('⚠️ Failed to fetch messages, using empty data');
+        setMessages([]);
       }
-    ];
-    setMessages(mockMessages);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      setMessages([]);
+    }
+  };
+
+  const fetchRecipients = async () => {
+    try {
+      console.log('👥 Fetching eligible recipients for supervisor...');
+      const response = await fetch('/api/messages/recipients');
+      if (response.ok) {
+        const data = await response.json();
+        console.log('👥 Recipients data:', data);
+        setRecipients(data.recipients || { admins: [], students: [] });
+      } else {
+        console.error('❌ Failed to fetch recipients');
+        setRecipients({ admins: [], students: [] });
+      }
+    } catch (error) {
+      console.error('❌ Error fetching recipients:', error);
+      setRecipients({ admins: [], students: [] });
+    }
   };
 
   const handleMessageClick = (message: Message) => {
@@ -87,10 +124,60 @@ export default function MessagesPage() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement send message API
-    console.log('Sending message:', newMessage);
-    setComposing(false);
-    setNewMessage({ receiver_email: '', subject: '', message_text: '' });
+    
+    if (selectedRecipients.length === 0 || !newMessage.subject || !newMessage.message_text) {
+      setError('Please select at least one recipient and fill in all fields');
+      return;
+    }
+
+    setComposing(true);
+    setError('');
+
+    try {
+      console.log('📤 Sending message to recipients:', selectedRecipients);
+      
+      // Send message to each selected recipient
+      const sendPromises = selectedRecipients.map(async (recipientId) => {
+        const messageToSend = {
+          receiver_id: recipientId,
+          subject: newMessage.subject.trim(),
+          message_text: newMessage.message_text.trim()
+        };
+
+        const response = await fetch('/api/messages/send', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(messageToSend),
+        });
+
+        return response;
+      });
+
+      const results = await Promise.allSettled(sendPromises);
+      
+      // Check if all messages were sent successfully
+      const successfulSends = results.filter(result => result.status === 'fulfilled' && (result as any).value.ok).length;
+      const totalRecipients = selectedRecipients.length;
+
+      if (successfulSends === totalRecipients) {
+        setNewMessage({ subject: '', message_text: '' });
+        setSelectedRecipients([]);
+        setComposing(false);
+        setSuccess(`Message sent successfully to ${totalRecipients} recipient(s)!`);
+        
+        // Refresh messages to show the new message
+        fetchMessages();
+      } else {
+        setError(`Message sent to ${successfulSends} out of ${totalRecipients} recipients. Some may have failed.`);
+      }
+    } catch (error) {
+      console.error('Send message error:', error);
+      setError('An error occurred while sending your message');
+    } finally {
+      setComposing(false);
+    }
   };
 
   if (loading) {
@@ -133,19 +220,15 @@ export default function MessagesPage() {
                   <div
                     key={message.id}
                     onClick={() => handleMessageClick(message)}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
-                      selectedMessage?.id === message.id
-                        ? 'bg-green-50 border-green-200 border'
-                        : message.is_read
-                        ? 'bg-gray-50 hover:bg-gray-100'
-                        : 'bg-blue-50 hover:bg-blue-100 border-blue-200 border'
-                    }`}
+                    className={`p-4 border-b cursor-pointer hover:bg-gray-50 ${
+                      selectedMessage?.id === message.id ? 'bg-blue-50 border-blue-200' : 'border-gray-200'
+                    } ${!message.is_read ? 'bg-blue-50' : ''}`}
                   >
-                    <div className="flex items-center justify-between">
-                      <p className={`text-sm font-medium ${
-                        message.is_read ? 'text-gray-900' : 'text-blue-900'
+                    <div className="flex items-center justify-between mb-2">
+                      <p className={`font-medium ${
+                        message.is_read ? 'text-gray-900' : 'text-blue-700 font-semibold'
                       }`}>
-                        {message.sender_name}
+                        {message.sender_first_name} {message.sender_last_name}
                       </p>
                       {!message.is_read && (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -176,21 +259,91 @@ export default function MessagesPage() {
                 <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
                   Compose New Message
                 </h3>
+                
+                {/* Error and Success Messages */}
+                {error && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-800">{error}</p>
+                  </div>
+                )}
+                {success && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                    <p className="text-sm text-green-800">{success}</p>
+                  </div>
+                )}
                 <form onSubmit={handleSendMessage} className="space-y-4">
                   <div>
-                    <label htmlFor="receiver_email" className="block text-sm font-medium text-gray-700">
-                      To
+                    <label htmlFor="recipients" className="block text-sm font-medium text-gray-700">
+                      To (Select multiple recipients)
                     </label>
-                    <input
-                      type="email"
-                      name="receiver_email"
-                      id="receiver_email"
-                      value={newMessage.receiver_email}
-                      onChange={(e) => setNewMessage({...newMessage, receiver_email: e.target.value})}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-green-500 focus:border-green-500 sm:text-sm"
-                      placeholder="recipient@example.com"
-                      required
-                    />
+                    <div className="mt-1 space-y-2">
+                      {/* Admins Section */}
+                      {recipients.admins.length > 0 && (
+                        <div className="border border-gray-200 rounded-md p-3">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Administrators</h4>
+                          <div className="space-y-2">
+                            {recipients.admins.map((admin) => (
+                              <label key={admin.id} className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  value={admin.id}
+                                  checked={selectedRecipients.includes(admin.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedRecipients([...selectedRecipients, admin.id]);
+                                    } else {
+                                      setSelectedRecipients(selectedRecipients.filter(id => id !== admin.id));
+                                    }
+                                  }}
+                                  className="mr-2 border-gray-300 text-green-600 focus:ring-green-500"
+                                />
+                                <span className="text-sm text-gray-700">
+                                  {admin.first_name} {admin.last_name} ({admin.email})
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Students Section */}
+                      {recipients.students.length > 0 && (
+                        <div className="border border-gray-200 rounded-md p-3">
+                          <h4 className="text-sm font-medium text-gray-700 mb-2">Assigned Students</h4>
+                          <div className="space-y-2">
+                            {recipients.students.map((student) => (
+                              <label key={student.id} className="flex items-center">
+                                <input
+                                  type="checkbox"
+                                  value={student.id}
+                                  checked={selectedRecipients.includes(student.id)}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setSelectedRecipients([...selectedRecipients, student.id]);
+                                    } else {
+                                      setSelectedRecipients(selectedRecipients.filter(id => id !== student.id));
+                                    }
+                                  }}
+                                  className="mr-2 border-gray-300 text-green-600 focus:ring-green-500"
+                                />
+                                <span className="text-sm text-gray-700">
+                                  {student.first_name} {student.last_name} ({student.registration_number})
+                                </span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {recipients.admins.length === 0 && recipients.students.length === 0 && (
+                        <p className="text-sm text-gray-500">No eligible recipients found</p>
+                      )}
+                    </div>
+                    {selectedRecipients.length > 0 && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        {selectedRecipients.length} recipient(s) selected
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -252,7 +405,7 @@ export default function MessagesPage() {
                   </h3>
                   <div className="mt-2 flex items-center justify-between">
                     <p className="text-sm text-gray-600">
-                      From: <span className="font-medium">{selectedMessage.sender_name}</span>
+                      From: <span className="font-medium">{selectedMessage.sender_first_name} {selectedMessage.sender_last_name}</span>
                     </p>
                     <p className="text-sm text-gray-500">
                       {new Date(selectedMessage.created_at).toLocaleString()}

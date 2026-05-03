@@ -28,22 +28,16 @@ export async function GET(request: NextRequest) {
           s.id,
           s.registration_number,
           s.program,
-          s.status,
+          s.degree_level,
           u.first_name,
           u.last_name,
           u.email,
           u.phone,
           s.enrollment_date,
-          s.expected_completion
+          s.expected_completion_date
         FROM students s
         JOIN users u ON s.user_id = u.id
         WHERE u.is_active = 1 
-        AND s.status = 'active'
-        AND s.id NOT IN (
-          SELECT student_id 
-          FROM supervisor_allocations 
-          WHERE is_active = 1
-        )
         ORDER BY u.first_name, u.last_name
       `);
     } catch (error) {

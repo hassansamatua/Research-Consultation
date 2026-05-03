@@ -35,29 +35,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get student information - use fallback if not a student or table doesn't exist
+    // Get student information
     let student = null;
     if (user.role_name === 'student') {
-      try {
-        student = await getOne(
-          'SELECT s.id, s.user_id FROM students s JOIN users u ON s.user_id = u.id WHERE u.id = ?',
-          [user.id]
-        );
-        console.log('Found student in database:', student);
-        
-        // If student not found, create fallback
-        if (!student) {
-          console.log('Student record not found, creating fallback student record');
-          student = { id: 1, user_id: user.id }; // Use a fallback ID
-          console.log('Using fallback student record:', student);
-        }
-      } catch (error) {
-        console.log('Students table not found, creating fallback student record');
-        // Create a fallback student record if the table doesn't exist
-        student = { id: 1, user_id: user.id }; // Use a fallback ID
-        console.log('Using fallback student record:', student);
-      }
+      student = await getOne(
+        'SELECT s.id, s.user_id FROM students s JOIN users u ON s.user_id = u.id WHERE u.id = ?',
+        [user.id]
+      );
+      console.log('Found student in database:', student);
     } else {
+      console.log('User is not a student');
+      return NextResponse.json(
+        { error: 'User is not a student' },
+        { status: 400 }
+      );
       console.log('User is not a student, creating fallback student record');
       // Create a fallback student record for non-student roles
       student = { id: 1, user_id: user.id };
@@ -81,13 +72,11 @@ export async function POST(request: NextRequest) {
       );
       console.log('Found allocation:', allocation);
     } catch (error) {
-      console.log('Supervisor allocations table not found, using fallback supervisor');
-      // Create a fallback supervisor allocation if the table doesn't exist
-      try {
-        allocation = { supervisor_id: 1 }; // Use a fallback supervisor ID
-      } catch (fallbackError) {
-        console.log('Could not create fallback supervisor allocation');
-      }
+      console.log('Error fetching supervisor allocation:', error);
+      return NextResponse.json(
+        { error: 'Failed to retrieve supervisor allocation' },
+        { status: 500 }
+      );
     }
 
     if (!allocation) {

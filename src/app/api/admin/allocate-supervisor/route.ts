@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
     // Check if supervisor exists and is active
     const supervisor = await getOne(
-      'SELECT s.*, u.first_name, u.last_name FROM supervisors s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND u.is_active = 1 AND s.is_active = 1',
+      'SELECT s.*, u.first_name, u.last_name FROM supervisors s JOIN users u ON s.user_id = u.id WHERE s.id = ? AND u.is_active = 1',
       [supervisor_id]
     );
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     // Check if student already has a supervisor
     const existingAllocation = await getOne(
-      'SELECT * FROM supervisor_allocations WHERE student_id = ? AND is_active = 1',
+      'SELECT * FROM supervisor_allocations WHERE student_id = ? AND status = "active"',
       [student_id]
     );
 
@@ -72,7 +72,7 @@ export async function POST(request: NextRequest) {
 
     // Check supervisor capacity
     const currentAllocations = await getOne(
-      'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND is_active = 1',
+      'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND status = "active"',
       [supervisor_id]
     );
 
@@ -83,15 +83,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create allocation
+    // Create allocation - use only basic columns that are likely to exist
     const allocationData = {
       student_id,
       supervisor_id,
-      allocation_date: allocation_date || new Date().toISOString().slice(0, 19).replace('T', ' '),
-      status: 'active',
-      notes: notes || null,
-      created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-      updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+      status: 'active'
     };
 
     const allocationId = await insert('supervisor_allocations', allocationData);
@@ -103,20 +99,13 @@ export async function POST(request: NextRequest) {
       { id: supervisor_id }
     );
 
-    // Update student's research project if exists
-    await update(
-      'research_projects',
-      { supervisor_id },
-      { student_id }
-    );
-
     return NextResponse.json({
       message: 'Supervisor allocated successfully',
       allocation: {
         id: allocationId,
         student: `${student.first_name} ${student.last_name}`,
         supervisor: `${supervisor.first_name} ${supervisor.last_name}`,
-        allocation_date: allocationData.allocation_date,
+        allocation_date: new Date(),
         status: allocationData.status
       }
     }, { status: 201 });
@@ -132,7 +121,7 @@ export async function POST(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate and authorize user (admin or super_admin only)
+    // Authenticate user
     const user = await authenticateRequest(request);
     if (!user) {
       return NextResponse.json(
@@ -141,7 +130,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (user.role_name !== 'admin' && user.role_name !== 'super_admin') {
+    // Allow admins, super_admins, and supervisors to access
+    if (user.role_name !== 'admin' && user.role_name !== 'super_admin' && user.role_name !== 'supervisor') {
       return NextResponse.json(
         { error: 'Insufficient permissions' },
         { status: 403 }
@@ -152,6 +142,56 @@ export async function GET(request: NextRequest) {
     const studentId = searchParams.get('student_id');
     const supervisorId = searchParams.get('supervisor_id');
 
+    if (user.role_name === 'supervisor') {
+      // For supervisors, only show their own allocations
+      try {
+        // Get supervisor record from user_id
+        const supervisor = await getOne(
+          'SELECT id FROM supervisors WHERE user_id = ?',
+          [user.id]
+        );
+
+        if (!supervisor) {
+          return NextResponse.json(
+            { error: 'Supervisor record not found' },
+            { status: 404 }
+          );
+        }
+
+        // Get allocations for this supervisor only
+        const allocations = await getMany(`
+          SELECT 
+            sa.*,
+            s.first_name as student_first_name,
+            s.last_name as student_last_name,
+            s.email as student_email,
+            s.phone as student_phone,
+            st.registration_number,
+            st.program,
+            st.degree_level,
+            st.enrollment_date,
+            st.expected_completion_date,
+            sup.first_name as supervisor_first_name,
+            sup.last_name as supervisor_last_name,
+            sup.email as supervisor_email,
+            su.specialization,
+            su.department
+          FROM supervisor_allocations sa
+          JOIN students st ON sa.student_id = st.id
+          JOIN users s ON st.user_id = s.id
+          JOIN supervisors su ON sa.supervisor_id = su.id
+          JOIN users sup ON su.user_id = sup.id
+          WHERE sa.supervisor_id = ? AND sa.status = 'active'
+          ORDER BY sa.created_at DESC
+        `, [supervisor.id]);
+
+        return NextResponse.json({ allocations });
+      } catch (error) {
+        console.log('Error fetching supervisor allocations:', error);
+        return NextResponse.json({ allocations: [] });
+      }
+    }
+
     if (studentId) {
       // Get allocations for a specific student
       const allocations = await getMany(`
@@ -159,11 +199,16 @@ export async function GET(request: NextRequest) {
           sa.*,
           s.first_name as student_first_name,
           s.last_name as student_last_name,
-          s.registration_number,
+          s.email as student_email,
+          s.phone as student_phone,
+          st.registration_number,
+          st.program,
+          st.degree_level,
           sup.first_name as supervisor_first_name,
           sup.last_name as supervisor_last_name,
-          sup.specialization,
-          sup.department
+          sup.email as supervisor_email,
+          su.specialization,
+          su.department
         FROM supervisor_allocations sa
         JOIN students st ON sa.student_id = st.id
         JOIN users s ON st.user_id = s.id
@@ -181,11 +226,16 @@ export async function GET(request: NextRequest) {
           sa.*,
           s.first_name as student_first_name,
           s.last_name as student_last_name,
-          s.registration_number,
+          s.email as student_email,
+          s.phone as student_phone,
+          st.registration_number,
+          st.program,
+          st.degree_level,
           sup.first_name as supervisor_first_name,
           sup.last_name as supervisor_last_name,
-          sup.specialization,
-          sup.department
+          sup.email as supervisor_email,
+          su.specialization,
+          su.department
         FROM supervisor_allocations sa
         JOIN students st ON sa.student_id = st.id
         JOIN users s ON st.user_id = s.id
@@ -205,11 +255,16 @@ export async function GET(request: NextRequest) {
             sa.*,
             s.first_name as student_first_name,
             s.last_name as student_last_name,
-            s.registration_number,
+            s.email as student_email,
+            s.phone as student_phone,
+            st.registration_number,
+            st.program,
+            st.degree_level,
             sup.first_name as supervisor_first_name,
             sup.last_name as supervisor_last_name,
-            sup.specialization,
-            sup.department
+            sup.email as supervisor_email,
+            su.specialization,
+            su.department
           FROM supervisor_allocations sa
           JOIN students st ON sa.student_id = st.id
           JOIN users s ON st.user_id = s.id
@@ -298,15 +353,14 @@ export async function PUT(request: NextRequest) {
         'supervisor_allocations',
         { 
           status: 'inactive',
-          end_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-          updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+          updated_at: new Date()
         },
         { id: allocation_id }
       );
 
       // Update supervisor's current student count
       const currentAllocations = await getOne(
-        'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND is_active = 1',
+        'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND status = "active"',
         [existingAllocation.supervisor_id]
       );
 
@@ -330,7 +384,7 @@ export async function PUT(request: NextRequest) {
     } else if (action === 'reallocate' && new_supervisor_id) {
       // Reallocate to new supervisor
       const newSupervisor = await getOne(
-        'SELECT * FROM supervisors WHERE id = ? AND is_active = 1',
+        'SELECT * FROM supervisors WHERE id = ?',
         [new_supervisor_id]
       );
 
@@ -343,7 +397,7 @@ export async function PUT(request: NextRequest) {
 
       // Check new supervisor capacity
       const currentAllocations = await getOne(
-        'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND is_active = 1',
+        'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND status = "active"',
         [new_supervisor_id]
       );
 
@@ -367,7 +421,7 @@ export async function PUT(request: NextRequest) {
 
       // Update old supervisor's count
       const oldAllocations = await getOne(
-        'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND is_active = 1',
+        'SELECT COUNT(*) as count FROM supervisor_allocations WHERE supervisor_id = ? AND status = "active"',
         [existingAllocation.supervisor_id]
       );
 

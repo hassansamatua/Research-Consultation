@@ -16,6 +16,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Zanzibar University Research Consultation System",
   description: "Postgraduate Research Management System",
+  icons: {
+    icon: '/logo.png',
+    apple: '/logo.png',
+  },
+  openGraph: {
+    images: [
+      {
+        url: '/logo.png',
+        width: 1200,
+        height: 630,
+        alt: 'Zanzibar University Logo',
+      },
+    ],
+  },
 };
 
 export default function RootLayout({

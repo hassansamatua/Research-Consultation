@@ -27,6 +27,12 @@ export default function ReviewPage() {
   const [loading, setLoading] = useState(true);
   const [submissions, setSubmissions] = useState<DocumentSubmission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<DocumentSubmission | null>(null);
+  const [statistics, setStatistics] = useState({
+    pending: 0,
+    reviewed: 0,
+    approved: 0,
+    needs_revision: 0
+  });
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [error, setError] = useState('');
@@ -69,10 +75,30 @@ export default function ReviewPage() {
       const response = await fetch('/api/documents/submit');
       if (response.ok) {
         const data = await response.json();
-        setSubmissions(data.submissions);
+        const submissionsData = data.submissions || [];
+        setSubmissions(submissionsData);
+        console.log('✅ Loaded submissions data:', submissionsData.length, 'submissions');
+        
+        // Calculate statistics from real data
+        const stats = {
+          pending: submissionsData.filter(s => s.status === 'pending').length,
+          reviewed: submissionsData.filter(s => s.status === 'reviewed').length,
+          approved: submissionsData.filter(s => s.status === 'approved').length,
+          needs_revision: submissionsData.filter(s => s.status === 'needs_revision').length
+        };
+        setStatistics(stats);
+        
+        console.log('✅ Loaded real submissions data:', submissionsData.length, 'submissions');
+        console.log('📊 Statistics:', stats);
+      } else {
+        console.log('⚠️ Failed to fetch submissions, using empty data');
+        setSubmissions([]);
+        setStatistics({ pending: 0, reviewed: 0, approved: 0, needs_revision: 0 });
       }
     } catch (error) {
       console.error('Failed to fetch submissions:', error);
+      setSubmissions([]);
+      setStatistics({ pending: 0, reviewed: 0, approved: 0, needs_revision: 0 });
     }
   };
 
@@ -199,33 +225,25 @@ export default function ReviewPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Pending Review</h3>
-          <div className="text-3xl font-bold text-yellow-600 mb-2">
-            {submissions.filter(s => s.status === 'pending').length}
-          </div>
+          <div className="text-3xl font-bold text-yellow-600 mb-2">{statistics.pending}</div>
           <p className="text-sm text-gray-600">Awaiting your review</p>
         </div>
-
+        
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Reviewed</h3>
-          <div className="text-3xl font-bold text-blue-600 mb-2">
-            {submissions.filter(s => s.status === 'reviewed').length}
-          </div>
+          <div className="text-3xl font-bold text-blue-600 mb-2">{statistics.reviewed}</div>
           <p className="text-sm text-gray-600">Currently under review</p>
         </div>
-
+        
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Approved</h3>
-          <div className="text-3xl font-bold text-green-600 mb-2">
-            {submissions.filter(s => s.status === 'approved').length}
-          </div>
+          <div className="text-3xl font-bold text-green-600 mb-2">{statistics.approved}</div>
           <p className="text-sm text-gray-600">Successfully approved</p>
         </div>
-
+        
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Needs Revision</h3>
-          <div className="text-3xl font-bold text-orange-600 mb-2">
-            {submissions.filter(s => s.status === 'needs_revision').length}
-          </div>
+          <div className="text-3xl font-bold text-red-600 mb-2">{statistics.needs_revision}</div>
           <p className="text-sm text-gray-600">Require changes</p>
         </div>
       </div>
@@ -247,10 +265,10 @@ export default function ReviewPage() {
                 Pending ({submissions.filter(s => s.status === 'pending').length})
               </button>
               <button className="py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                Approved ({submissions.filter(s => s.status === 'approved').length})
+                Approved ({statistics.approved})
               </button>
               <button className="py-2 px-1 border-b-2 border-transparent font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">
-                Needs Revision ({submissions.filter(s => s.status === 'needs_revision').length})
+                Needs Revision ({statistics.needs_revision})
               </button>
             </nav>
           </div>

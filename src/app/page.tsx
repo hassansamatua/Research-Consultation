@@ -1,5 +1,15 @@
 import Link from 'next/link';
 import ThemeToggle from '@/components/ThemeToggle';
+import {
+  BookOpen,
+  Calendar,
+  Phone,
+  Info,
+  User,
+  Shield,
+  Settings,
+  BarChart3
+} from 'lucide-react';
 
 export default function Home() {
   return (
@@ -13,9 +23,11 @@ export default function Home() {
         <div className="text-center max-w-4xl mx-auto">
           {/* University Logo/Branding */}
           <div className="mb-8">
-            <div className="mx-auto h-24 w-24 bg-green-600 rounded-full flex items-center justify-center mb-4">
-              <div className="h-16 w-16 bg-white rounded"></div>
-            </div>
+            <img
+              src="/logo.png"
+              alt="Zanzibar University Logo"
+              className="h-24 w-24 object-contain mx-auto mb-4"
+            />
             <h1 className="text-4xl font-bold text-gray-900 mb-2">
               Zanzibar University
             </h1>
@@ -32,7 +44,7 @@ export default function Home() {
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
             <div className="bg-white p-6 rounded-lg shadow-md">
               <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
-                <div className="h-6 w-6 bg-green-600 rounded"></div>
+                <User className="h-6 w-6 text-green-600" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Student Portal</h3>
               <p className="text-gray-600 text-sm">
@@ -42,7 +54,7 @@ export default function Home() {
             
             <div className="bg-white p-6 rounded-lg shadow-md">
               <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
-                <div className="h-6 w-6 bg-green-600 rounded"></div>
+                <Shield className="h-6 w-6 text-green-600" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Supervisor Dashboard</h3>
               <p className="text-gray-600 text-sm">
@@ -52,7 +64,7 @@ export default function Home() {
             
             <div className="bg-white p-6 rounded-lg shadow-md">
               <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
-                <div className="h-6 w-6 bg-green-600 rounded"></div>
+                <Settings className="h-6 w-6 text-green-600" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Admin Control</h3>
               <p className="text-gray-600 text-sm">
@@ -62,7 +74,7 @@ export default function Home() {
             
             <div className="bg-white p-6 rounded-lg shadow-md">
               <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center mb-4 mx-auto">
-                <div className="h-6 w-6 bg-green-600 rounded"></div>
+                <BarChart3 className="h-6 w-6 text-green-600" />
               </div>
               <h3 className="font-semibold text-gray-900 mb-2">Real-time Tracking</h3>
               <p className="text-gray-600 text-sm">
@@ -102,17 +114,21 @@ export default function Home() {
           <div className="mt-12 text-center">
             <h4 className="text-lg font-semibold text-gray-900 mb-4">Quick Links</h4>
             <div className="flex flex-wrap justify-center gap-6 text-sm">
-              <Link href="/guidelines" className="text-green-600 hover:text-green-700">
+              <Link href="/guidelines" className="flex items-center text-green-600 hover:text-green-700">
+                <BookOpen className="h-5 w-5 mr-2" />
                 Research Guidelines
               </Link>
-              <Link href="/deadlines" className="text-green-600 hover:text-green-700">
+              <Link href="/deadlines" className="flex items-center text-green-600 hover:text-green-700">
+                <Calendar className="h-5 w-5 mr-2" />
                 Academic Deadlines
               </Link>
-              <Link href="/contact" className="text-green-600 hover:text-green-700">
+              <Link href="/contact" className="flex items-center text-green-600 hover:text-green-700">
+                <Phone className="h-5 w-5 mr-2" />
                 Contact Support
               </Link>
-              <Link href="/about" className="text-green-600 hover:text-green-700">
-                About the System
+              <Link href="/about" className="flex items-center text-green-600 hover:text-green-700">
+                <Info className="h-5 w-5 mr-2" />
+                About System
               </Link>
             </div>
           </div>

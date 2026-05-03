@@ -30,7 +30,6 @@ export async function GET(request: NextRequest) {
           s.specialization,
           s.max_students,
           s.current_students,
-          s.is_active,
           u.first_name,
           u.last_name,
           u.email,
@@ -39,7 +38,6 @@ export async function GET(request: NextRequest) {
         FROM supervisors s
         JOIN users u ON s.user_id = u.id
         WHERE u.is_active = 1 
-        AND s.is_active = 1
         AND s.current_students < s.max_students
         ORDER BY u.first_name, u.last_name
       `);

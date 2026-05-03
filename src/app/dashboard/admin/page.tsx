@@ -24,6 +24,50 @@ interface Role {
   description: string;
 }
 
+interface AdminMessage {
+  id: number;
+  sender_id: number;
+  receiver_id: number;
+  subject: string;
+  message_text: string;
+  is_read: boolean;
+  created_at: string;
+  sender_first_name: string;
+  sender_last_name: string;
+  sender_email: string;
+  sender_role: string;
+  receiver_first_name: string;
+  receiver_last_name: string;
+  receiver_email: string;
+  receiver_role: string;
+}
+
+interface AdminMeeting {
+  id: number;
+  supervisor_id: number;
+  student_id: number;
+  title: string;
+  description: string;
+  meeting_date: string;
+  meeting_time: string;
+  location: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  notes: string;
+  created_at: string;
+  updated_at: string;
+  supervisor_first_name: string;
+  supervisor_last_name: string;
+  supervisor_email: string;
+  student_first_name: string;
+  student_last_name: string;
+  student_email: string;
+  student_registration_number: string;
+  requested_by: 'supervisor' | 'student';
+  approval_status: 'pending' | 'approved' | 'rejected';
+  rejection_reason?: string;
+  request_date: string;
+}
+
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -32,10 +76,13 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [roles, setRoles] = useState<Role[]>([]);
+  const [messages, setMessages] = useState<AdminMessage[]>([]);
+  const [meetings, setMeetings] = useState<AdminMeeting[]>([]);
+  const [activeTab, setActiveTab] = useState('overview');
   const [stats, setStats] = useState<AdminStats>({
-    totalUsers: 201,
-    totalProjects: 142,
-    pendingApprovals: 8,
+    totalUsers: 0,
+    totalProjects: 0,
+    pendingApprovals: 0,
     systemHealth: 'excellent'
   });
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
@@ -59,6 +106,13 @@ export default function AdminDashboard() {
     fetchRoles();
   }, []);
 
+  useEffect(() => {
+    if (user) {
+      fetchMessages();
+      fetchMeetings();
+    }
+  }, [user]);
+
   const checkAuth = async () => {
     try {
       const response = await fetch('/api/auth/me');
@@ -81,45 +135,23 @@ export default function AdminDashboard() {
   };
 
   const fetchAdminData = async () => {
-    // Mock admin data
-    const mockActivity: RecentActivity[] = [
-      {
-        id: 1,
-        type: 'user_registration',
-        description: 'New student registered: Ali Hassan',
-        user: 'System',
-        timestamp: '2024-01-15T10:30:00Z'
-      },
-      {
-        id: 2,
-        type: 'supervisor_allocation',
-        description: 'Dr. Mohamed Ali assigned 3 new students',
-        user: 'Admin User',
-        timestamp: '2024-01-15T09:15:00Z'
-      },
-      {
-        id: 3,
-        type: 'submission_review',
-        description: '5 proposals awaiting review',
-        user: 'System',
-        timestamp: '2024-01-14T16:20:00Z'
-      },
-      {
-        id: 4,
-        type: 'system_backup',
-        description: 'Automatic database backup completed',
-        user: 'System',
-        timestamp: '2024-01-14T02:00:00Z'
-      },
-      {
-        id: 5,
-        type: 'deadline_created',
-        description: 'New deadline created: Chapter 1 Submission',
-        user: 'Admin User',
-        timestamp: '2024-01-13T14:30:00Z'
+    try {
+      const response = await fetch('/api/admin/dashboard-stats');
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setStats(data.statistics);
+          setRecentActivity(data.recent_activity);
+          console.log('Loaded real admin data:', data.statistics);
+        } else {
+          console.log('Failed to fetch admin data, using fallback');
+        }
+      } else {
+        console.log('API response not ok');
       }
-    ];
-    setRecentActivity(mockActivity);
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+    }
   };
 
   const fetchRoles = async () => {
@@ -155,6 +187,50 @@ export default function AdminDashboard() {
         { id: 4, name: 'super_admin', description: 'Super admin user' }
       ]);
     }
+  };
+
+  const fetchMessages = async () => {
+    try {
+      const response = await fetch('/api/admin/messages');
+      if (response.ok) {
+        const data = await response.json();
+        setMessages(data.messages || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch messages:', error);
+    }
+  };
+
+  const fetchMeetings = async () => {
+    try {
+      const response = await fetch('/api/admin/meetings');
+      if (response.ok) {
+        const data = await response.json();
+        setMeetings(data.meetings || []);
+      }
+    } catch (error) {
+      console.error('Failed to fetch meetings:', error);
+    }
+  };
+
+  const getTotalMessages = () => {
+    return messages.length;
+  };
+
+  const getUnreadMessageCount = () => {
+    return messages.filter(m => !m.is_read).length;
+  };
+
+  const getTotalMeetings = () => {
+    return meetings.length;
+  };
+
+  const getUpcomingMeetings = () => {
+    const now = new Date();
+    return meetings.filter(m => {
+      const meetingDateTime = new Date(`${m.meeting_date}T${m.meeting_time}`);
+      return meetingDateTime > now && m.status === 'scheduled';
+    });
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -258,15 +334,15 @@ export default function AdminDashboard() {
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Active Projects</h3>
-          <div className="text-3xl font-bold text-green-600 mb-2">{stats.totalProjects}</div>
-          <p className="text-sm text-gray-600">Research projects</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Messages</h3>
+          <div className="text-3xl font-bold text-green-600 mb-2">{getTotalMessages()}</div>
+          <p className="text-sm text-gray-600">{getUnreadMessageCount()} unread</p>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Pending Approvals</h3>
-          <div className="text-3xl font-bold text-orange-600 mb-2">{stats.pendingApprovals}</div>
-          <p className="text-sm text-gray-600">Awaiting review</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Meetings</h3>
+          <div className="text-3xl font-bold text-purple-600 mb-2">{getTotalMeetings()}</div>
+          <p className="text-sm text-gray-600">{getUpcomingMeetings().length} upcoming</p>
         </div>
 
         <div className="bg-white p-6 rounded-lg shadow">
@@ -293,6 +369,14 @@ export default function AdminDashboard() {
             </button>
             
             <button 
+              onClick={() => router.push('/dashboard/admin/reviews')}
+              className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left"
+            >
+              <h4 className="font-semibold text-gray-900 mb-1">View Reviews</h4>
+              <p className="text-sm text-gray-600">Monitor supervisor feedback and comments</p>
+            </button>
+            
+            <button 
               onClick={() => router.push('/dashboard/supervisor-allocation')}
               className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left"
             >
@@ -306,6 +390,22 @@ export default function AdminDashboard() {
             >
               <h4 className="font-semibold text-gray-900 mb-1">Document Management</h4>
               <p className="text-sm text-gray-600">Review all document submissions</p>
+            </button>
+            
+            <button 
+              onClick={() => router.push('/dashboard/admin/communications')}
+              className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left"
+            >
+              <h4 className="font-semibold text-gray-900 mb-1">View Communications</h4>
+              <p className="text-sm text-gray-600">Monitor student-supervisor communications</p>
+            </button>
+            
+            <button 
+              onClick={() => router.push('/dashboard/admin/meetings')}
+              className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left"
+            >
+              <h4 className="font-semibold text-gray-900 mb-1">Meeting Management</h4>
+              <p className="text-sm text-gray-600">Schedule and manage meetings</p>
             </button>
             
             <button className="p-4 border border-gray-300 rounded-lg hover:bg-gray-50 text-left">
@@ -349,7 +449,7 @@ export default function AdminDashboard() {
         </button>
         
         <div className="inline-block px-4 py-2 bg-purple-500 text-white rounded">
-          Roles Loaded: {roles.length} ({roles.map(r => r.name).join(', ')})
+          Roles Loaded: {roles?.length || 0} ({roles?.map(r => r.name).join(', ') || 'None'})
         </div>
       </div>
 
@@ -459,7 +559,7 @@ export default function AdminDashboard() {
                   required
                 >
                   <option value="">Select a role</option>
-                  {roles.map((role) => (
+                  {roles?.map((role) => (
                     <option key={role.id} value={role.id}>
                       {role.name}
                     </option>
@@ -579,7 +679,7 @@ export default function AdminDashboard() {
         <div className="px-4 py-5 sm:p-6">
           <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">Recent Activity</h3>
           <div className="space-y-4">
-            {recentActivity.map((activity) => (
+            {recentActivity?.map((activity) => (
               <div key={activity.id} className="flex items-start space-x-3 p-3 border-b border-gray-200 last:border-b-0">
                 <div className={`text-2xl ${getActivityColor(activity.type)}`}>
                   {getActivityIcon(activity.type)}
@@ -659,6 +759,182 @@ export default function AdminDashboard() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="bg-white shadow rounded-lg mb-8">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6" aria-label="Tabs">
+            {['overview', 'messages', 'meetings', 'users'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
+                  activeTab === tab
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <div className="flex items-center space-x-2">
+                  {tab === 'overview' && (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 001-1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1H2a1 1 0 00-1 1v4a1 1 0 001 1h3m10-11l2 2" />
+                    </svg>
+                  )}
+                  {tab === 'messages' && (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  {tab === 'meetings' && (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  {tab === 'users' && (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1m0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  )}
+                  <span className="capitalize">{tab}</span>
+                </div>
+              </button>
+            ))}
+          </nav>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div>
+        {activeTab === 'messages' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div className="px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">All Messages</h3>
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-500">
+                  {messages.length} total messages ({getUnreadMessageCount()} unread)
+                </p>
+                <button
+                  onClick={() => fetchMessages()}
+                  className="text-sm text-blue-600 hover:text-blue-500"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {messages?.map((message, index) => (
+                <div key={`message-${message.id}-${index}`} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className={`w-3 h-3 rounded-full ${
+                        message.is_read ? 'bg-gray-300' : 'bg-blue-500'
+                      }`}></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">
+                            {message.sender_first_name} {message.sender_last_name} ({message.sender_role})
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            → {message.receiver_first_name} {message.receiver_last_name} ({message.receiver_role})
+                          </p>
+                          <p className="text-sm text-gray-900 font-medium">{message.subject}</p>
+                        </div>
+                        <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {new Date(message.created_at).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {message.message_text}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {messages.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="font-medium">No messages yet</p>
+                  <p className="text-sm text-gray-400 mt-1">Messages between supervisors and students will appear here</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'meetings' && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+            <div className="px-6 py-4">
+              <h3 className="text-lg font-semibold text-gray-900">All Meetings</h3>
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-500">
+                  {meetings.length} total meetings ({getUpcomingMeetings().length} upcoming)
+                </p>
+                <button
+                  onClick={() => fetchMeetings()}
+                  className="text-sm text-blue-600 hover:text-blue-500"
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+            <div className="divide-y divide-gray-200">
+              {meetings?.map((meeting, index) => (
+                <div key={`meeting-${meeting.id}-${index}`} className="p-6 hover:bg-gray-50 transition-colors">
+                  <div className="flex items-start space-x-4">
+                    <div className="flex-shrink-0">
+                      <div className={`w-3 h-3 rounded-full ${
+                        meeting.status === 'scheduled'
+                          ? 'bg-blue-500'
+                          : meeting.status === 'completed'
+                          ? 'bg-green-500'
+                          : 'bg-red-500'
+                      }`}></div>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{meeting.title}</p>
+                          <p className="text-sm text-gray-500">
+                            {meeting.supervisor_first_name} {meeting.supervisor_last_name} ↔ {meeting.student_first_name} {meeting.student_last_name}
+                          </p>
+                          <p className="text-xs text-gray-500">{meeting.student_registration_number}</p>
+                        </div>
+                        <div className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                          {meeting.status}
+                        </div>
+                      </div>
+                      <div className="text-xs text-gray-500 mb-3">
+                        {new Date(`${meeting.meeting_date}T${meeting.meeting_time}`).toLocaleString()}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        <p className="font-medium text-gray-700 mb-1">📍 {meeting.location}</p>
+                        <p>{meeting.description}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {meetings.length === 0 && (
+                <div className="text-center py-12 text-gray-500">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <p className="font-medium">No meetings scheduled</p>
+                  <p className="text-sm text-gray-400 mt-1">Meetings between supervisors and students will appear here</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

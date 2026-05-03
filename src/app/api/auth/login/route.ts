@@ -1,20 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authenticateUser } from '@/lib/auth';
 import { testConnection } from '@/lib/db';
+import { createDatabaseErrorResponse } from '@/lib/dbErrorHandler';
 
 export async function POST(request: NextRequest) {
   try {
-    // Test database connection
+    // Test database connection with better error handling
     const dbConnected = await testConnection();
     if (!dbConnected) {
       return NextResponse.json(
-        { error: 'Database connection failed' },
-        { status: 500 }
+        { 
+          error: 'Database is temporarily unavailable. Please try again in a few moments.',
+          retryable: true 
+        },
+        { status: 503 }
       );
     }
 
     const body = await request.json();
-    const { email, password } = body;
+    const { email, password, rememberMe = false } = body;
 
     // Validate input
     if (!email || !password) {
@@ -24,20 +28,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Authenticate user
-    const result = await authenticateUser(email, password);
+    // Authenticate user with remember me preference
+    const result = await authenticateUser(email, password, rememberMe);
 
     // Set HTTP-only cookie with token
     const response = NextResponse.json({
       message: 'Login successful',
-      user: result.user
+      user: result.user,
+      expiresIn: result.expiresIn
     });
+
+    // Calculate cookie max age based on remember me
+    const maxAge = rememberMe ? 30 * 24 * 60 * 60 : 24 * 60 * 60; // 30 days or 24 hours
 
     response.cookies.set('token', result.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: maxAge,
       path: '/'
     });
 
@@ -45,6 +53,12 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Login error:', error);
+    
+    // Handle database connection errors specifically
+    const dbError = createDatabaseErrorResponse(error);
+    if (dbError.isConnectionError) {
+      return NextResponse.json(dbError, { status: 503 });
+    }
     
     if (error instanceof Error) {
       if (error.message === 'Invalid credentials') {

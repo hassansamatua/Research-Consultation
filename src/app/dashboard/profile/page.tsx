@@ -50,9 +50,39 @@ export default function ProfilePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement profile update API
-    console.log('Updating profile:', formData);
-    setEditing(false);
+    
+    try {
+      console.log('📝 Updating profile:', formData);
+      
+      const response = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          phone: formData.phone
+        })
+      });
+
+      const result = await response.json();
+      console.log('📝 Profile update response:', result);
+
+      if (response.ok) {
+        alert('Profile updated successfully!');
+        setEditing(false);
+        // Update local user state with new data
+        if (result.user) {
+          setUser(result.user);
+        }
+      } else {
+        alert(result.error || 'Failed to update profile');
+      }
+    } catch (error) {
+      console.error('❌ Profile update error:', error);
+      alert('Failed to update profile');
+    }
   };
 
   if (loading) {

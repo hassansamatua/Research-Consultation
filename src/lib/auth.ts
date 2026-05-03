@@ -18,8 +18,8 @@ export async function verifyPassword(password: string, hashedPassword: string): 
 }
 
 // JWT token generation
-export function generateToken(payload: object): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions);
+export function generateToken(payload: object, expiresIn: string = JWT_EXPIRES_IN): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn } as jwt.SignOptions);
 }
 
 // JWT token verification
@@ -32,7 +32,7 @@ export function verifyToken(token: string): any {
 }
 
 // User authentication
-export async function authenticateUser(email: string, password: string) {
+export async function authenticateUser(email: string, password: string, rememberMe: boolean = false) {
   const query = `
     SELECT u.*, r.name as role_name 
     FROM users u 
@@ -55,18 +55,20 @@ export async function authenticateUser(email: string, password: string) {
   // Remove password from user object
   const { password: _, ...userWithoutPassword } = user;
   
-  // Generate JWT token
+  // Generate JWT token with different expiration based on remember me
+  const tokenExpiresIn = rememberMe ? '30d' : '24h';
   const token = generateToken({
     id: user.id,
     email: user.email,
     role: user.role_name,
     firstName: user.first_name,
     lastName: user.last_name
-  });
+  }, tokenExpiresIn);
   
   return {
     user: userWithoutPassword,
-    token
+    token,
+    expiresIn: tokenExpiresIn
   };
 }
 

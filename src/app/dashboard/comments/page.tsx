@@ -9,21 +9,31 @@ interface Comment {
   reviewer_id: number;
   reviewer_name: string;
   reviewer_role: string;
-  comment: string;
+  comments: string;
+  rating: number | null;
   recommendation: string;
+  review_type: string;
   created_at: string;
-  is_private: boolean;
+  updated_at: string;
 }
 
 interface Submission {
   id: number;
   title: string;
+  description: string;
   document_type: string;
+  file_url: string;
+  file_name: string;
+  file_size: number;
   status: string;
   student_name: string;
   student_email: string;
+  registration_number: string;
   submitted_at: string;
   research_stage_name: string;
+  research_stage_order: number;
+  supervisor_name: string;
+  supervisor_email: string;
 }
 
 export default function CommentsPage() {
@@ -32,7 +42,13 @@ export default function CommentsPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
+  const [statistics, setStatistics] = useState<any>({});
   const [newComment, setNewComment] = useState('');
+  const [rating, setRating] = useState<number>(5);
+  const [recommendation, setRecommendation] = useState<string>('approve');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const router = useRouter();
 
   useEffect(() => {
@@ -63,111 +79,30 @@ export default function CommentsPage() {
 
   const fetchCommentsAndSubmissions = async () => {
     try {
-      // Try to get comments from database
-      let commentsData = null;
-      let submissionsData = null;
+      // Fetch real data from our new dashboard-stats API
+      const response = await fetch('/api/comments/dashboard-stats');
       
-      try {
-        const commentsResponse = await fetch('/api/documents/review');
-        if (commentsResponse.ok) {
-          const data = await commentsResponse.json();
-          commentsData = data.reviews || [];
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setComments(data.reviews || []);
+          setSubmissions(data.submissions || []);
+          setStatistics(data.statistics || {});
+          console.log('✅ Loaded real comments and submissions data');
+        } else {
+          console.log('⚠️ API returned error, using empty data');
+          setComments([]);
+          setSubmissions([]);
         }
-      } catch (error) {
-        console.log('Could not fetch comments from database');
+      } else {
+        console.log('⚠️ Failed to fetch data, using empty data');
+        setComments([]);
+        setSubmissions([]);
       }
-
-      try {
-        const submissionsResponse = await fetch('/api/documents/submit');
-        if (submissionsResponse.ok) {
-          const data = await submissionsResponse.json();
-          submissionsData = data.submissions || [];
-        }
-      } catch (error) {
-        console.log('Could not fetch submissions from database');
-      }
-
-      // If no data from database, create fallback data
-      if (!commentsData || commentsData.length === 0) {
-        console.log('No comments found, using fallback data');
-        commentsData = [
-          {
-            id: 1,
-            submission_id: 1,
-            reviewer_id: 1,
-            reviewer_name: 'Dr. Sarah Johnson',
-            reviewer_role: 'supervisor',
-            comment: 'Good start on the literature review. However, I recommend expanding the theoretical framework section to include more recent research from 2023-2024. The methodology section looks solid but needs more detail on data collection procedures.',
-            recommendation: 'resubmit',
-            created_at: '2024-01-20T10:30:00Z',
-            is_private: false
-          },
-          {
-            id: 2,
-            submission_id: 1,
-            reviewer_id: 1,
-            reviewer_name: 'Dr. Sarah Johnson',
-            reviewer_role: 'supervisor',
-            comment: 'Much improved version! The theoretical framework is now comprehensive and well-structured. Data collection procedures are clearly outlined. Consider adding a timeline diagram to the methodology section for better clarity.',
-            recommendation: 'approve',
-            created_at: '2024-01-25T14:15:00Z',
-            is_private: false
-          },
-          {
-            id: 3,
-            submission_id: 2,
-            reviewer_id: 2,
-            reviewer_name: 'Dr. Michael Brown',
-            reviewer_role: 'supervisor',
-            comment: 'The introduction section provides good context for the research. However, the research questions could be more focused. Consider refining the research objectives to be more specific and measurable.',
-            recommendation: 'resubmit',
-            created_at: '2024-01-22T09:45:00Z',
-            is_private: false
-          }
-        ];
-      }
-
-      // If no submissions data, create fallback submissions
-      if (!submissionsData || submissionsData.length === 0) {
-        console.log('No submissions found, using fallback data');
-        submissionsData = [
-          {
-            id: 1,
-            title: 'Literature Review Draft',
-            document_type: 'Literature Review',
-            status: 'approved',
-            student_name: 'John Doe',
-            student_email: 'john.doe@zu.ac.tz',
-            submitted_at: '2024-01-15T10:30:00Z',
-            research_stage_name: 'Literature Review'
-          },
-          {
-            id: 2,
-            title: 'Chapter 1 - Introduction',
-            document_type: 'Chapter',
-            status: 'pending',
-            student_name: 'Jane Smith',
-            student_email: 'jane.smith@zu.ac.tz',
-            submitted_at: '2024-01-20T14:15:00Z',
-            research_stage_name: 'Chapter 1: Introduction'
-          },
-          {
-            id: 3,
-            title: 'Research Proposal',
-            document_type: 'Proposal',
-            status: 'reviewed',
-            student_name: 'John Doe',
-            student_email: 'john.doe@zu.ac.tz',
-            submitted_at: '2024-01-10T09:00:00Z',
-            research_stage_name: 'Research Proposal'
-          }
-        ];
-      }
-
-      setComments(commentsData);
-      setSubmissions(submissionsData);
     } catch (error) {
-      console.error('Failed to fetch comments and submissions:', error);
+      console.error('Error fetching comments and submissions:', error);
+      setComments([]);
+      setSubmissions([]);
     }
   };
 
@@ -183,6 +118,10 @@ export default function CommentsPage() {
   const handleAddComment = async () => {
     if (!newComment.trim() || !selectedSubmission) return;
 
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+
     try {
       const response = await fetch('/api/documents/review', {
         method: 'POST',
@@ -192,19 +131,28 @@ export default function CommentsPage() {
         body: JSON.stringify({
           submission_id: selectedSubmission.id,
           comments: newComment,
-          recommendation: 'resubmit'
+          rating: rating,
+          recommendation: recommendation,
+          review_type: user?.role_name === 'supervisor' ? 'supervisor' : 'admin'
         }),
       });
 
       if (response.ok) {
         setNewComment('');
-        // Refresh comments
+        setRating(5);
+        setRecommendation('approve');
+        setSuccess('Review submitted successfully!');
+        // Refresh comments and submissions
         fetchCommentsAndSubmissions();
       } else {
-        console.error('Failed to add comment');
+        const errorData = await response.json();
+        setError(errorData.error || 'Failed to add comment');
       }
     } catch (error) {
       console.error('Error adding comment:', error);
+      setError('An error occurred while adding your comment');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -235,31 +183,25 @@ export default function CommentsPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Total Comments</h3>
-          <div className="text-3xl font-bold text-blue-600">{comments.length}</div>
+          <div className="text-3xl font-bold text-blue-600">{statistics.total_comments || 0}</div>
           <p className="text-sm text-gray-600">All feedback provided</p>
         </div>
         
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Pending Reviews</h3>
-          <div className="text-3xl font-bold text-orange-600">
-            {submissions.filter(s => s.status === 'pending').length}
-          </div>
+          <div className="text-3xl font-bold text-orange-600">{statistics.pending_reviews || 0}</div>
           <p className="text-sm text-gray-600">Awaiting feedback</p>
         </div>
         
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Approved</h3>
-          <div className="text-3xl font-bold text-green-600">
-            {submissions.filter(s => s.status === 'approved').length}
-          </div>
+          <div className="text-3xl font-bold text-green-600">{statistics.approved_submissions || 0}</div>
           <p className="text-sm text-gray-600">Completed submissions</p>
         </div>
         
         <div className="bg-white p-6 rounded-lg shadow">
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Needs Revision</h3>
-          <div className="text-3xl font-bold text-red-600">
-            {submissions.filter(s => s.status === 'reviewed').length}
-          </div>
+          <div className="text-3xl font-bold text-red-600">{statistics.needs_revision || 0}</div>
           <p className="text-sm text-gray-600">Require changes</p>
         </div>
       </div>
@@ -352,28 +294,85 @@ export default function CommentsPage() {
             {/* Add Comment Form */}
             {selectedSubmission && user.role_name !== 'student' && (
               <div className="mb-6">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Add Feedback</h4>
+                <h4 className="text-sm font-medium text-gray-900 mb-4">Add Review & Feedback</h4>
+                
+                {/* Error and Success Messages */}
+                {error && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-sm text-red-800">{error}</p>
+                  </div>
+                )}
+                {success && (
+                  <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-md">
+                    <p className="text-sm text-green-800">{success}</p>
+                  </div>
+                )}
+
                 <div className="space-y-4">
-                  <textarea
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                    placeholder="Provide your feedback and recommendations..."
-                  />
+                  {/* Rating */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Rating</label>
+                    <div className="flex items-center space-x-2">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          type="button"
+                          onClick={() => setRating(star)}
+                          className="text-2xl focus:outline-none"
+                        >
+                          {star <= rating ? '⭐' : '☆'}
+                        </button>
+                      ))}
+                      <span className="ml-2 text-sm text-gray-600">({rating}/5)</span>
+                    </div>
+                  </div>
+
+                  {/* Recommendation */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Recommendation</label>
+                    <select
+                      value={recommendation}
+                      onChange={(e) => setRecommendation(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                    >
+                      <option value="approve">Approve</option>
+                      <option value="resubmit">Resubmit with Changes</option>
+                      <option value="reject">Reject</option>
+                    </select>
+                  </div>
+
+                  {/* Comments */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Comments</label>
+                    <textarea
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      placeholder="Provide your feedback and recommendations..."
+                    />
+                  </div>
+
+                  {/* Action Buttons */}
                   <div className="flex justify-end space-x-3">
                     <button
-                      onClick={handleAddComment}
-                      disabled={!newComment.trim()}
-                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Submit Feedback
-                    </button>
-                    <button
-                      onClick={() => setNewComment('')}
+                      onClick={() => {
+                        setNewComment('');
+                        setRating(5);
+                        setRecommendation('approve');
+                        setError('');
+                        setSuccess('');
+                      }}
                       className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
                     >
                       Clear
+                    </button>
+                    <button
+                      onClick={handleAddComment}
+                      disabled={!newComment.trim() || submitting}
+                      className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {submitting ? 'Submitting...' : 'Submit Review'}
                     </button>
                   </div>
                 </div>
@@ -416,14 +415,34 @@ export default function CommentsPage() {
                       </div>
                     </div>
                     
-                    <div className="mt-3">
-                      <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getRecommendationColor(comment.recommendation)}`}>
-                        {comment.recommendation}
-                      </span>
-                    </div>
-                    
                     <div className="bg-gray-50 rounded-md p-3 mt-2">
-                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.comment}</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          {comment.rating && (
+                            <div className="flex items-center">
+                              {[1, 2, 3, 4, 5].map((star) => (
+                                <span key={star} className="text-sm">
+                                  {star <= (comment.rating || 0) ? '⭐' : '☆'}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${getRecommendationColor(comment.recommendation)}`}>
+                            {comment.recommendation}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-500">
+                          {new Date(comment.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">{comment.comments}</p>
+                      {comment.review_type && (
+                        <div className="mt-2">
+                          <span className="text-xs text-gray-500">
+                            Review Type: {comment.review_type}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))

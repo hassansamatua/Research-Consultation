@@ -43,8 +43,47 @@ CREATE TABLE document_submissions (
     FOREIGN KEY (supervisor_id) REFERENCES supervisors(id) ON DELETE SET NULL
 );
 
+-- Document Reviews table
+CREATE TABLE document_reviews (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    submission_id INT NOT NULL,
+    reviewer_id INT NOT NULL,
+    review_text TEXT,
+    rating INT DEFAULT 0,
+    status ENUM('pending', 'completed', 'rejected') DEFAULT 'pending',
+    reviewed_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (submission_id) REFERENCES document_submissions(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewer_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+-- Meetings table
+CREATE TABLE meetings (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    supervisor_id INT NOT NULL,
+    student_id INT NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    meeting_date DATE NOT NULL,
+    meeting_time TIME NOT NULL,
+    location VARCHAR(255),
+    status ENUM('scheduled', 'completed', 'cancelled', 'rescheduled') DEFAULT 'scheduled',
+    meeting_notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (supervisor_id) REFERENCES supervisors(id) ON DELETE CASCADE,
+    FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
+);
+
 -- Create indexes for new tables
 CREATE INDEX idx_document_types_name ON document_types(name);
 CREATE INDEX idx_document_submissions_student ON document_submissions(student_id);
 CREATE INDEX idx_document_submissions_status ON document_submissions(status);
 CREATE INDEX idx_document_submissions_stage ON document_submissions(research_stage_id);
+CREATE INDEX idx_document_reviews_submission ON document_reviews(submission_id);
+CREATE INDEX idx_document_reviews_reviewer ON document_reviews(reviewer_id);
+CREATE INDEX idx_meetings_supervisor ON meetings(supervisor_id);
+CREATE INDEX idx_meetings_student ON meetings(student_id);
+CREATE INDEX idx_meetings_date ON meetings(meeting_date);
+CREATE INDEX idx_meetings_status ON meetings(status);

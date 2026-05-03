@@ -8,38 +8,64 @@ const dbConfig = {
   password: process.env.DB_PASSWORD || '',
   database: process.env.DB_NAME || 'research_consultant',
   waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  acquireTimeout: 60000,
-  timeout: 60000,
-  reconnect: true,
+  connectionLimit: 5, // Reduced from 20 to 5
+  queueLimit: 10, // Added queue limit
+  connectTimeout: 10000, // Reduced from 60000 to 10 seconds
+  acquireTimeout: 10000, // Added acquire timeout
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 0,
+  charset: 'utf8mb4',
 };
 
 // Create connection pool
 const pool = mysql.createPool(dbConfig);
 
-// Test connection
-export async function testConnection() {
-  try {
-    const connection = await pool.getConnection();
-    await connection.ping();
-    connection.release();
-    console.log('Database connected successfully');
-    return true;
-  } catch (error) {
-    console.error('Database connection failed:', error);
-    return false;
+// Test connection with retry logic
+export async function testConnection(maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const connection = await pool.getConnection();
+      await connection.ping();
+      connection.release();
+      console.log('Database connected successfully');
+      return true;
+    } catch (error) {
+      console.error(`Database connection attempt ${attempt} failed:`, error);
+      
+      if (attempt === maxRetries) {
+        console.error('Max retry attempts reached. Database connection failed.');
+        return false;
+      }
+      
+      // Wait before retrying (exponential backoff)
+      const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
+  return false;
 }
 
-// Execute query with error handling
+// Execute query with error handling and connection management
 export async function executeQuery(query: string, params: any[] = []) {
+  let connection;
   try {
-    const [rows] = await pool.execute(query, params);
+    connection = await pool.getConnection();
+    const [rows] = await connection.execute(query, params);
     return rows;
   } catch (error) {
     console.error('Query execution error:', error);
+    
+    // Handle connection errors specifically
+    if (error instanceof Error && (error as any).code === 'ER_CON_COUNT_ERROR') {
+      console.error('Database connection limit reached. Please try again later.');
+      throw new Error('Database is temporarily unavailable. Please try again in a few moments.');
+    }
+    
     throw error;
+  } finally {
+    if (connection) {
+      connection.release();
+    }
   }
 }
 

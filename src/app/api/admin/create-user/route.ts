@@ -112,11 +112,11 @@ export async function POST(request: NextRequest) {
         user_id: userId,
         registration_number: registration_number,
         program: program || '',
-        enrollment_date: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        expected_completion: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 19).replace('T', ' '),
-        status: 'active',
-        created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-        updated_at: new Date().toISOString().slice(0, 19).replace('T', ' ')
+        degree_level: 'Masters',
+        enrollment_date: new Date(),
+        expected_completion_date: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+        created_at: new Date(),
+        updated_at: new Date()
       });
     }
 
